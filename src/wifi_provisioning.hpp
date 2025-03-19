@@ -40,6 +40,9 @@ namespace esp32_wifi_util
         wifi_provisioning(const wifi_provisioning&) = delete;
         wifi_provisioning& operator=(const wifi_provisioning&) = delete;
 
+        friend void Wifi_Event_Handler(
+            void* arg, const char* event_base, int32_t event_id, void* event_data);
+
     public:
         wifi_provisioning();
         ~wifi_provisioning() = default;
@@ -49,13 +52,16 @@ namespace esp32_wifi_util
         void auto_connect(connect_callback_t connect_cb);
 
         // 开始配置服务器，通常在 auto_connect
-        bool start_config_server(std::string ap_ssid = "ESP32", std::string ap_password = "");
+        bool start_config_server(std::string ap_ssid = "ESP32", std::string ap_password = "", int port = 80);
 
         // 扫描 Wi-Fi 网络
         void scan_networks(scan_callback_t scan_callback);
 
         // 连接到指定的 Wi-Fi 网络
         bool connect_wifi(const std::string& ssid, const std::string& password);
+
+        // 创建一个 Wi-Fi 热点
+        bool create_ap(const std::string& ssid, const std::string& password);
 
         // 停止，当调用 stop 时，会停止所有的 Wi-Fi 操作，包括扫描和连接
         void stop();
@@ -67,22 +73,22 @@ namespace esp32_wifi_util
         std::string get_connected_ip() const;
 
     private:
-        void scan_timer_cb();
-
         void call_connect_cb(wifi_status status, const std::string& ssid);
         void call_scan_cb(const std::vector<wifi_network>& wifi_list);
+
+        int http_test_handler(void* arg);
+        int http_wifi_list_handler(void* arg);
+        int http_wifi_config_handler(void* arg);
+
+        void wifi_event_handler(const char* event_base, int32_t event_id, void* event_data);
 
     private:
         connect_callback_t m_connect_cb;
         scan_callback_t m_scan_cb;
 
-        std::string m_ap_name;
-        std::string m_ap_ssid;
-        std::string m_ap_password;
-
         std::string m_ssid;
-        std::string m_password;
         std::vector<wifi_network> m_wifi_list;
+
         std::atomic_bool m_abort{ false };
     };
 }
