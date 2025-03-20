@@ -26,7 +26,7 @@
 namespace esp32_wifi_util
 {
     static const int WIFI_DONE_BIT = BIT0;
-    static const char *TAG = "WIFI";
+    static const char *TAG = "WIFI_PROVISIONING";
     static const char *wifi_settings = "wifi_settings";
 
     static wifi_mode_t g_wifi_mode = WIFI_MODE_NULL;
