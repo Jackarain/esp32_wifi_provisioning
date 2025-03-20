@@ -52,6 +52,9 @@ g_wifi_provisioning->auto_connect([](wifi_status status, std::string ssid) mutab
     {
     case wifi_status::CONNECTED:
         ESP_LOGI("GUEST", "Wi-Fi 连接成功: %s", ssid.c_str());
+        g_wifi_provisioning->stop();
+        delete g_wifi_provisioning;
+        g_wifi_provisioning = nullptr;
         break;
     case wifi_status::FAILED:
         ESP_LOGE("GUEST", "Wi-Fi 连接失败: %s", ssid.c_str());
@@ -71,7 +74,7 @@ extern "C" void loop()
     static int count = 0;
     ESP_LOGI("GUEST", "Count: %d", count++);
 
-    if (++count == 2000)
+    if (++count == 2000 && g_wifi_provisioning)
     {
         g_wifi_provisioning->stop();
         delete g_wifi_provisioning;
