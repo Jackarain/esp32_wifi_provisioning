@@ -42,6 +42,32 @@ namespace esp32_wifi_util
         self->wifi_event_handler(event_base, event_id, event_data);
     }
 
+    void wifi_provisioning::reset_event_handler()
+    {
+        if (g_instance_any_id)
+        {
+            esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, g_instance_any_id);
+            g_instance_any_id = nullptr;
+        }
+
+        if (g_instance_got_ip)
+        {
+            esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, g_instance_got_ip);
+            g_instance_got_ip = nullptr;
+        }
+
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+            ESP_EVENT_ANY_ID,
+            &Wifi_Event_Handler,
+            this,
+            &g_instance_any_id));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+            IP_EVENT_STA_GOT_IP,
+            &Wifi_Event_Handler,
+            this,
+            &g_instance_got_ip));
+    }
+
     void wifi_provisioning::wifi_event_handler(const char *event_base, int32_t event_id, void *event_data)
     {
         if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -98,17 +124,7 @@ namespace esp32_wifi_util
 
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-        // 注册事件处理程序
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                            ESP_EVENT_ANY_ID,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                            IP_EVENT_STA_GOT_IP,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_got_ip));
+        reset_event_handler();
 
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     }
@@ -277,16 +293,7 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
         // 注册事件处理程序
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                            ESP_EVENT_ANY_ID,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                            IP_EVENT_STA_GOT_IP,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_got_ip));
+        reset_event_handler();
 
         strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
         strcpy((char *)wifi_config.sta.password, password.c_str());
@@ -331,16 +338,7 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
         // 注册事件处理程序
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                            ESP_EVENT_ANY_ID,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                            IP_EVENT_STA_GOT_IP,
-                                                            &Wifi_Event_Handler,
-                                                            this,
-                                                            &g_instance_got_ip));
+        reset_event_handler();
 
         wifi_config_t wifi_config = {0};
 

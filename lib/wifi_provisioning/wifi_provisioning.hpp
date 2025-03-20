@@ -94,6 +94,7 @@ namespace esp32_wifi_util
         int http_wifi_list_handler(void* arg);
         int http_wifi_config_handler(void* arg);
 
+        void reset_event_handler();
         void wifi_event_handler(const char* event_base, int32_t event_id, void* event_data);
 
     private:
