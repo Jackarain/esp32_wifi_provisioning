@@ -441,7 +441,6 @@ namespace esp32_wifi_util
     void wifi_provisioning::stop()
     {
         m_abort = true;
-        g_wifi_mode = WIFI_MODE_NULL;
 
         if (g_httpd_server)
         {
