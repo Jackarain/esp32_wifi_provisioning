@@ -27,6 +27,7 @@ namespace esp32_wifi_util
 {
     static const int WIFI_DONE_BIT = BIT0;
     static const char *TAG = "WIFI";
+    static const char *wifi_settings = "wifi_settings";
 
     static wifi_mode_t g_wifi_mode = WIFI_MODE_NULL;
     static esp_event_handler_instance_t g_instance_any_id = nullptr;
@@ -120,13 +121,13 @@ namespace esp32_wifi_util
 
         // 使用 scoped_exit 确保返回时回调失败。
         scoped_exit failed_exit([&]
-                                { call_connect_cb(wifi_status::FAILED, {}); });
+                                { call_connect_cb(wifi_status::FAILED, m_ssid); });
 
         std::string ap_password;
 
         // 首先从 NVS 中读取 Wi-Fi 的 SSID 和密码，如果读取成功，则直接连接。
         nvs_handle_t nvs;
-        auto err = nvs_open("wifi_settings", NVS_READONLY, &nvs);
+        auto err = nvs_open(wifi_settings, NVS_READONLY, &nvs);
         if (err == ESP_OK)
         {
             // 使用 scoped_exit 来确保 nvs_close 能够被调用。
@@ -252,6 +253,25 @@ namespace esp32_wifi_util
         // 保存 Wi-Fi 模式
         g_wifi_mode = WIFI_MODE_STA;
 
+        // 初始化 Wi-Fi
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        ESP_ERROR_CHECK(esp_wifi_deinit());
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+        // 注册事件处理程序
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                            ESP_EVENT_ANY_ID,
+                                                            &Wifi_Event_Handler,
+                                                            this,
+                                                            &g_instance_any_id));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                            IP_EVENT_STA_GOT_IP,
+                                                            &Wifi_Event_Handler,
+                                                            this,
+                                                            &g_instance_got_ip));
+
         strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
         strcpy((char *)wifi_config.sta.password, password.c_str());
 
@@ -259,7 +279,7 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
 
-        ESP_LOGI(TAG, "Connecting to WiFi %s", ssid.c_str());
+        ESP_LOGI(TAG, "开始连接 WiFi %s, 密码: %s", ssid.c_str(), password.c_str());
         EventBits_t bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT, false, true, portMAX_DELAY);
         xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
         if (bits & WIFI_DONE_BIT)
@@ -286,6 +306,25 @@ namespace esp32_wifi_util
 
         // 保存 Wi-Fi 模式
         g_wifi_mode = WIFI_MODE_AP;
+
+        // 初始化 Wi-Fi
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        ESP_ERROR_CHECK(esp_wifi_deinit());
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+        // 注册事件处理程序
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                            ESP_EVENT_ANY_ID,
+                                                            &Wifi_Event_Handler,
+                                                            this,
+                                                            &g_instance_any_id));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                            IP_EVENT_STA_GOT_IP,
+                                                            &Wifi_Event_Handler,
+                                                            this,
+                                                            &g_instance_got_ip));
 
         wifi_config_t wifi_config = {0};
 
@@ -527,12 +566,33 @@ namespace esp32_wifi_util
 
         // 存储 Wi-Fi 配置到 NVS
         nvs_handle_t nvs;
-        auto err = nvs_open("wifi_settings", NVS_READWRITE, &nvs);
+        auto err = nvs_open(wifi_settings, NVS_READWRITE, &nvs);
         if (err == ESP_OK)
         {
+            ESP_LOGI(TAG, "保存 Wi-Fi 配置到 NVS");
             err = nvs_set_str(nvs, "ssid", ssid->valuestring);
-            if (err == ESP_OK)
-                err = nvs_set_str(nvs, "password", password->valuestring);
+            if (err != ESP_OK)
+            {
+                ESP_LOGI(TAG, "保存 SSID 失败, ERROR: %d", err);
+
+                nvs_close(nvs);
+                httpd_resp_send_500(req);
+
+                return ESP_FAIL;
+            }
+
+            err = nvs_set_str(nvs, "password", password->valuestring);
+            if (err != ESP_OK)
+            {
+                ESP_LOGI(TAG, "保存密码失败, ERROR: %d", err);
+
+                nvs_close(nvs);
+                httpd_resp_send_500(req);
+
+                return ESP_FAIL;
+            }
+
+            nvs_commit(nvs);
             nvs_close(nvs);
         }
 
