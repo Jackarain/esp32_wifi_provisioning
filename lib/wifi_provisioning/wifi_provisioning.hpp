@@ -57,7 +57,7 @@ namespace esp32_wifi_util
         // 在 HTTP 成功启动后，用户可以通过访问 http://192.168.4.1/wl (GET 请求) 获取设备扫描到
         // 的可用 Wi-Fi 网络列表，并通过 http://192.168.4.1/wc (POST 请求) 提交一个 JSON 数据来
         // 配置 Wi-Fi，JSON 格式示例：
-        //   {"ssid":"your_ssid","password":"your_password"}。
+        //   {"ssid":"your_ssid","password":"your_password"}
         //
         // 函数参数：
         //   - ap_ssid: 配置模式下设备的 Wi-Fi 热点名称，默认为 "ESP32"。
