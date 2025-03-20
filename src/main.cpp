@@ -8,9 +8,6 @@
 #include "wifi_provisioning.hpp"
 #include "scoped_exit.hpp"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 static const char *TAG = "GUEST";
 
@@ -18,7 +15,7 @@ using namespace esp32_wifi_util;
 
 wifi_provisioning* g_wifi_provisioning = nullptr;
 
-void setup()
+extern "C" void setup()
 {
     ESP_LOGI("GUEST", "进入配置阶段");
 
@@ -51,7 +48,8 @@ g_wifi_provisioning->auto_connect([](wifi_status status, std::string ssid) mutab
         break;
     case wifi_status::FAILED:
         ESP_LOGE("GUEST", "Wi-Fi 连接失败: %s", ssid.c_str());
-        g_wifi_provisioning->connect_wifi("客厅网络", "20121208");
+        // g_wifi_provisioning->connect_wifi("客厅网络", "20121208");
+        g_wifi_provisioning->start_config_server("ESP32-XXXX", "20121208");
         break;
     default:
         break;
@@ -64,7 +62,7 @@ g_wifi_provisioning->auto_connect([](wifi_status status, std::string ssid) mutab
     // wp.connect_wifi("客厅网络", "20121208");
 }
 
-void loop()
+extern "C" void loop()
 {
     ESP_LOGI("GUEST", "IP 地址: %s", g_wifi_provisioning->get_connected_ip().c_str());
     static int count = 0;
@@ -78,7 +76,3 @@ void loop()
         ESP_LOGI("GUEST", "停止 Wi-Fi 配置");
     }
 }
-
-#ifdef __cplusplus
-}
-#endif
