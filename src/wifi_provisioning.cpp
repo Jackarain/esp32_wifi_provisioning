@@ -511,12 +511,14 @@ namespace esp32_wifi_util
             return ESP_FAIL;
         }
 
+        scoped_exit root_deleter([&]
+            { cJSON_Delete(root); });
+
         cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
         cJSON *password = cJSON_GetObjectItem(root, "password");
 
         if (!ssid || !password)
         {
-            cJSON_Delete(root);
             httpd_resp_send_500(req);
             return ESP_FAIL;
         }
@@ -533,8 +535,6 @@ namespace esp32_wifi_util
                 err = nvs_set_str(nvs, "password", password->valuestring);
             nvs_close(nvs);
         }
-
-        cJSON_Delete(root);
 
         // 连接到 Wi-Fi
         if (connect_wifi(ssid->valuestring, password->valuestring))
