@@ -56,10 +56,6 @@ g_wifi_provisioning->auto_connect([](wifi_status status, std::string ssid) mutab
     }
 });
 #endif
-
-    // wp.start();
-    // wp.scan_wifi();
-    // wp.connect_wifi("客厅网络", "20121208");
 }
 
 extern "C" void loop()
