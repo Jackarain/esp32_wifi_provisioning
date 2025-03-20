@@ -126,29 +126,45 @@ namespace esp32_wifi_util
         std::string ap_password;
 
         // 首先从 NVS 中读取 Wi-Fi 的 SSID 和密码，如果读取成功，则直接连接。
-        nvs_handle_t nvs;
-        auto err = nvs_open(wifi_settings, NVS_READONLY, &nvs);
+        nvs_handle_t nvs_handle;
+        auto err = nvs_open(wifi_settings, NVS_READONLY, &nvs_handle);
         if (err == ESP_OK)
         {
             // 使用 scoped_exit 来确保 nvs_close 能够被调用。
             scoped_exit e([&]
-                          { nvs_close(nvs); });
+                          { nvs_close(nvs_handle); });
 
             size_t len = 0;
             char buf[64] = {0};
-            err = nvs_get_str(nvs, "ssid", buf, &len);
+            err = nvs_get_str(nvs_handle, "ssid", nullptr, &len);
+            if (err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "NVS 获取 SSID 长度失败, 开始配网");
+                return;
+            }
+
+            err = nvs_get_str(nvs_handle, "ssid", buf, &len);
             if (err == ESP_OK)
             {
                 m_ssid = buf;
             }
             else
             {
-                ESP_LOGE(TAG, "NVS get ssid failed, start provisioning");
+                ESP_LOGE(TAG, "NVS 获取 SSID 长度失败, 开始配网");
                 return;
             }
+
             len = 0;
+
+            err = nvs_get_str(nvs_handle, "password", nullptr, &len);
+            if (err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "NVS 获取密码长度失败, 开始配网");
+                return;
+            }
+
             memset(&buf[0], 0, sizeof(buf));
-            err = nvs_get_str(nvs, "password", buf, &len);
+            err = nvs_get_str(nvs_handle, "password", buf, &len);
             if (err == ESP_OK)
             {
                 ap_password = buf;
@@ -565,35 +581,35 @@ namespace esp32_wifi_util
         ESP_LOGI(TAG, "SSID: %s, Password: %s", ssid->valuestring, password->valuestring);
 
         // 存储 Wi-Fi 配置到 NVS
-        nvs_handle_t nvs;
-        auto err = nvs_open(wifi_settings, NVS_READWRITE, &nvs);
+        nvs_handle_t nvs_handle;
+        auto err = nvs_open(wifi_settings, NVS_READWRITE, &nvs_handle);
         if (err == ESP_OK)
         {
             ESP_LOGI(TAG, "保存 Wi-Fi 配置到 NVS");
-            err = nvs_set_str(nvs, "ssid", ssid->valuestring);
+            err = nvs_set_str(nvs_handle, "ssid", ssid->valuestring);
             if (err != ESP_OK)
             {
                 ESP_LOGI(TAG, "保存 SSID 失败, ERROR: %d", err);
 
-                nvs_close(nvs);
+                nvs_close(nvs_handle);
                 httpd_resp_send_500(req);
 
                 return ESP_FAIL;
             }
 
-            err = nvs_set_str(nvs, "password", password->valuestring);
+            err = nvs_set_str(nvs_handle, "password", password->valuestring);
             if (err != ESP_OK)
             {
                 ESP_LOGI(TAG, "保存密码失败, ERROR: %d", err);
 
-                nvs_close(nvs);
+                nvs_close(nvs_handle);
                 httpd_resp_send_500(req);
 
                 return ESP_FAIL;
             }
 
-            nvs_commit(nvs);
-            nvs_close(nvs);
+            ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+            nvs_close(nvs_handle);
         }
 
         // 连接到 Wi-Fi
