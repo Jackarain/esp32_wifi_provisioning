@@ -310,15 +310,15 @@ namespace esp32_wifi_util
         }
     }
 
-    bool wifi_provisioning::create_ap(const std::string &ssid, const std::string &password)
+    bool wifi_provisioning::create_ap(const std::string &ap_ssid, const std::string &ap_password)
     {
-        if (ssid.empty())
+        if (ap_ssid.empty())
         {
             ESP_LOGW(TAG, "SSID is empty");
             return false;
         }
 
-        m_ssid = ssid;
+        m_ssid = ap_ssid;
 
         // 保存 Wi-Fi 模式
         g_wifi_mode = WIFI_MODE_AP;
@@ -344,10 +344,10 @@ namespace esp32_wifi_util
 
         wifi_config_t wifi_config = {0};
 
-        strcpy((char *)wifi_config.ap.ssid, ssid.c_str());
-        if (!password.empty())
+        strcpy((char *)wifi_config.ap.ssid, m_ssid.c_str());
+        if (!ap_password.empty())
         {
-            strcpy((char *)wifi_config.ap.password, password.c_str());
+            strcpy((char *)wifi_config.ap.password, ap_password.c_str());
             wifi_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
         }
         else
@@ -355,7 +355,7 @@ namespace esp32_wifi_util
             wifi_config.ap.authmode = WIFI_AUTH_OPEN;
         }
 
-        wifi_config.ap.ssid_len = ssid.size();
+        wifi_config.ap.ssid_len = m_ssid.size();
         wifi_config.ap.channel = 1;
         wifi_config.ap.max_connection = 4;
         wifi_config.ap.beacon_interval = 100;
@@ -364,7 +364,7 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
 
-        ESP_LOGI(TAG, "WiFi 已经启动, SSID: %s", ssid.c_str());
+        ESP_LOGI(TAG, "WiFi 已经启动, SSID: %s", m_ssid.c_str());
 
         return true;
     }

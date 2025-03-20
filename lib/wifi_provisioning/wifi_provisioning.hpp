@@ -51,7 +51,20 @@ namespace esp32_wifi_util
         // 开始自动配网
         void auto_connect(connect_callback_t connect_cb);
 
-        // 开始配置服务器，通常在 auto_connect
+        // 启动配置服务器，通常在自动连接 Wi-Fi 失败时调用（auto_connect）。
+        // 该函数会启动一个 HTTP 服务器，用于手动配置设备的 Wi-Fi 连接，配置成功后，该设备将自动尝
+        // 试连接到用户指定的 Wi-Fi 网络，具体用法：
+        // 在 HTTP 成功启动后，用户可以通过访问 http://192.168.4.1/wl (GET 请求) 获取设备扫描到
+        // 的可用 Wi-Fi 网络列表，并通过 http://192.168.4.1/wc (POST 请求) 提交一个 JSON 数据来
+        // 配置 Wi-Fi，JSON 格式示例：
+        //   {"ssid":"your_ssid","password":"your_password"}。
+        //
+        // 函数参数：
+        //   - ap_ssid: 配置模式下设备的 Wi-Fi 热点名称，默认为 "ESP32"。
+        //   - ap_password: 配置模式下设备的 Wi-Fi 热点密码，默认为空（无密码）。
+        //   - port: HTTP 服务器监听的端口号，默认为 80。
+        // 返回值：
+        //   - bool: 启动服务器成功返回 true，失败返回 false。
         bool start_config_server(std::string ap_ssid = "ESP32", std::string ap_password = "", int port = 80);
 
         // 扫描 Wi-Fi 网络
@@ -61,7 +74,7 @@ namespace esp32_wifi_util
         bool connect_wifi(const std::string& ssid, const std::string& password);
 
         // 创建一个 Wi-Fi 热点
-        bool create_ap(const std::string& ssid, const std::string& password);
+        bool create_ap(const std::string& ap_ssid, const std::string& ap_password);
 
         // 停止，当调用 stop 时，会停止所有的 Wi-Fi 操作，如果已经连接到 Wi-Fi，不会断开连接。
         // 通常用于程序退出时调用，或者成功连接到 Wi-Fi 后调用以释放资源。
