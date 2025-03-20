@@ -63,7 +63,8 @@ namespace esp32_wifi_util
         // 创建一个 Wi-Fi 热点
         bool create_ap(const std::string& ssid, const std::string& password);
 
-        // 停止，当调用 stop 时，会停止所有的 Wi-Fi 操作，包括扫描和连接
+        // 停止，当调用 stop 时，会停止所有的 Wi-Fi 操作，如果已经连接到 Wi-Fi，不会断开连接。
+        // 通常用于程序退出时调用，或者成功连接到 Wi-Fi 后调用以释放资源。
         void stop();
 
         // 连接到指定的 Wi-Fi 网络的 SSID
