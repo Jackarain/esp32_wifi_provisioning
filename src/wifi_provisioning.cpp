@@ -431,12 +431,10 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 HTTP 请求");
+        ESP_LOGI(TAG, "处理 test HTTP 请求");
 
         // 处理请求
         httpd_resp_send(req, "Hello, World!", -1);
-
-        req->uri;
 
         return ESP_OK;
     }
@@ -487,12 +485,66 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 HTTP 请求");
+        ESP_LOGI(TAG, "处理 wifi config HTTP 请求");
 
-        // 处理请求
-        httpd_resp_send(req, "Hello, World!", -1);
+        char buf[100]; // 用于存储POST数据的缓冲区
+        int ret;
 
-        req->uri;
+        // 获取POST数据
+        ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+        if (ret <= 0)
+        {   // 如果没有数据可用，或者发生错误，则返回错误
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+                httpd_resp_send_408(req);
+            return ESP_FAIL;
+        }
+
+        // 确保缓冲区以null结尾
+        buf[ret] = '\0';
+        ESP_LOGI(TAG, "POST数据: %s", buf);
+
+        // 解析 JSON 数据，获取 SSID 和密码
+        cJSON *root = cJSON_Parse(buf);
+        if (!root)
+        {
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+
+        cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
+        cJSON *password = cJSON_GetObjectItem(root, "password");
+
+        if (!ssid || !password)
+        {
+            cJSON_Delete(root);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+
+        ESP_LOGI(TAG, "SSID: %s, Password: %s", ssid->valuestring, password->valuestring);
+
+        // 存储 Wi-Fi 配置到 NVS
+        nvs_handle_t nvs;
+        auto err = nvs_open("wifi_settings", NVS_READWRITE, &nvs);
+        if (err == ESP_OK)
+        {
+            err = nvs_set_str(nvs, "ssid", ssid->valuestring);
+            if (err == ESP_OK)
+                err = nvs_set_str(nvs, "password", password->valuestring);
+            nvs_close(nvs);
+        }
+
+        cJSON_Delete(root);
+
+        // 连接到 Wi-Fi
+        if (connect_wifi(ssid->valuestring, password->valuestring))
+        {
+            httpd_resp_send(req, "OK", -1);
+        }
+        else
+        {
+            httpd_resp_send_500(req);
+        }
 
         return ESP_OK;
     }
