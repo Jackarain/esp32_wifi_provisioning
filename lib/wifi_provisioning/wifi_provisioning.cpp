@@ -846,4 +846,15 @@ R"xxxxxxxx(<!DOCTYPE html>
 
         return {};
     }
+
+    void wifi_provisioning::clear_wifi_config()
+    {
+        nvs_handle_t nvs_handle;
+        auto err = nvs_open(wifi_settings, NVS_READWRITE, &nvs_handle);
+        if (err == ESP_OK)
+        {
+            nvs_erase_all(nvs_handle);
+            nvs_close(nvs_handle);
+        }
+    }
 }

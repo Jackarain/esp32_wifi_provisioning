@@ -88,6 +88,9 @@ namespace esp32_wifi_util
         // 获取连接的 IP 地址
         std::string get_connected_ip() const;
 
+        // 清除 Wi-Fi 配置信息
+        void clear_wifi_config();
+
     private:
         void call_connect_cb(wifi_status status, const std::string& ssid);
         void call_scan_cb(const std::vector<wifi_network>& wifi_list);
