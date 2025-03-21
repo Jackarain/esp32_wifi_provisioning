@@ -109,6 +109,7 @@ namespace esp32_wifi_util
 
         std::string m_ssid;
         std::vector<wifi_network> m_wifi_list;
+        int m_retry_count = 0;
 
         std::atomic_bool m_abort{ false };
     };

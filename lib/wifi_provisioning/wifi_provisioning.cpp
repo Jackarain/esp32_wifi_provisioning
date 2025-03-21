@@ -79,7 +79,7 @@ namespace esp32_wifi_util
         else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
         {
             ESP_LOGI(TAG, "STATION 模式，重新连接到 Wi-Fi");
-            if (g_wifi_mode == WIFI_MODE_STA)
+            if (g_wifi_mode == WIFI_MODE_STA && ++m_retry_count < 5)
                 esp_wifi_connect();
         }
         else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
@@ -216,6 +216,7 @@ namespace esp32_wifi_util
         ESP_LOGI(TAG, "开始扫描 Wi-Fi 网络 ...");
 
         m_scan_cb = scan_callback;
+        m_retry_count = 0;
 
         ESP_ERROR_CHECK(esp_wifi_start());
 
