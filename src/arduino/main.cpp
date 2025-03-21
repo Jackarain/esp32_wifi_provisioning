@@ -69,15 +69,20 @@ void setup()
 
 void loop()
 {
-    ESP_LOGI(TAG, "IP 地址: %s", g_wifi_provisioning->get_connected_ip().c_str());
     static int count = 0;
+
     ESP_LOGI(TAG, "Count: %d", count++);
 
-    if (++count == 2000 && g_wifi_provisioning)
+    if (g_wifi_provisioning)
     {
-        g_wifi_provisioning->stop();
-        delete g_wifi_provisioning;
-        g_wifi_provisioning = nullptr;
-        ESP_LOGI(TAG, "停止 Wi-Fi 配置");
+        ESP_LOGI(TAG, "IP 地址: %s", g_wifi_provisioning->get_connected_ip().c_str());
+
+        if (++count == 2000)
+        {
+            g_wifi_provisioning->stop();
+            delete g_wifi_provisioning;
+            g_wifi_provisioning = nullptr;
+            ESP_LOGI(TAG, "停止 Wi-Fi 配置");
+        }
     }
 }
