@@ -428,6 +428,18 @@ namespace esp32_wifi_util
             };
             httpd_register_uri_handler(g_httpd_server, &http_wifi_config);
 
+            httpd_uri_t http_wifi_webconfig = {
+                .uri = "/webconfig",
+                .method = HTTP_GET,
+                .handler = [](httpd_req_t *req) -> esp_err_t
+                {
+                    auto self = (wifi_provisioning *)req->user_ctx;
+                    return self->http_wifi_web_config_handler((void *)req);
+                },
+                .user_ctx = (void *)this // 用户上下文（可选）
+            };
+            httpd_register_uri_handler(g_httpd_server, &http_wifi_webconfig);
+
             ESP_LOGI(TAG, "HTTP server started on port %d", config.server_port);
         }
         else
@@ -618,6 +630,147 @@ namespace esp32_wifi_util
         {
             httpd_resp_send_500(req);
         }
+
+        return ESP_OK;
+    }
+
+    int wifi_provisioning::http_wifi_web_config_handler(void *arg)
+    {
+        auto req = (httpd_req_t *)arg;
+
+        ESP_LOGI(TAG, "处理 test HTTP 请求");
+
+        // 处理请求
+        httpd_resp_send(req,
+R"xxxxxxxx(<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WiFi 配置</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .input-group {
+            margin: 10px 0;
+            text-align: center;
+        }
+        input {
+            padding: 5px;
+            width: 200px;
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+            color: #ffffff;
+            border-radius: 4px;
+        }
+        input::placeholder {
+            color: #888888;
+        }
+        button {
+            padding: 8px 20px;
+            margin: 10px 0;
+            background-color: #404040;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #505050;
+        }
+        #wifiList {
+            list-style: none;
+            padding: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 200px;
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 4px;
+        }
+        #wifiList li {
+            padding: 5px;
+            cursor: pointer;
+            text-align: center;
+            border-bottom: 1px solid #404040;
+        }
+        #wifiList li:last-child {
+            border-bottom: none;
+        }
+        #wifiList li:hover {
+            background-color: #383838;
+        }
+    </style>
+</head>
+<body>
+    <div class="input-group">
+        <input type="text" id="ssid" placeholder="请输入SSID">
+    </div>
+    <div class="input-group">
+        <input type="password" id="password" placeholder="请输入密码">
+    </div>
+    <button onclick="configureWifi()">配置</button>
+    <ul id="wifiList"></ul>
+
+    <script>
+        // 配置WiFi
+        function configureWifi() {
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+            const data = {
+                ssid: ssid,
+                password: password
+            };
+
+            fetch('http://192.168.4.1/wc', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => console.log('Success:', data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        // 获取并显示WiFi列表
+        function loadWifiList() {
+            fetch('http://192.168.4.1/wl')
+                .then(response => response.json())
+                .then(data => {
+                    // 按rssi从大到小排序
+                    data.sort((a, b) => b.rssi - a.rssi);
+
+                    const wifiList = document.getElementById('wifiList');
+                    wifiList.innerHTML = ''; // 清空现有列表
+
+                    data.forEach(wifi => {
+                        const li = document.createElement('li');
+                        li.textContent = wifi.ssid;
+                        li.onclick = () => {
+                            document.getElementById('ssid').value = wifi.ssid;
+                        };
+                        wifiList.appendChild(li);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // 页面加载时获取WiFi列表
+        window.onload = loadWifiList;
+    </script>
+</body>
+</html>)xxxxxxxx", -1);
 
         return ESP_OK;
     }
