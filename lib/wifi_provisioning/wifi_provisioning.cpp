@@ -855,6 +855,11 @@ R"xxxxxxxx(<!DOCTYPE html>
         {
             nvs_erase_all(nvs_handle);
             nvs_close(nvs_handle);
+
+            ESP_LOGI(TAG, "Wi-Fi 配置已清除");
+            return;
         }
+
+        ESP_LOGW(TAG, "Wi-Fi 清除配置时 nvs 打开失败, ERROR: %d", err);
     }
 }
