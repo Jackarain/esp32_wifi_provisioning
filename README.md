@@ -143,7 +143,8 @@ int main() {
 调用 `start_config_server()` 后：
 
 1. 连接到 ESP32 的 AP（默认 SSID：`ESP32`）。
-2. 打开浏览器，访问 `http://192.168.4.1/webconfig`。
+2. 打开浏览器，访问 `http://192.168.4.1/webconfig`，用户可以通过下面 web 页面配置：
+    ![image](https://github.com/user-attachments/assets/04ef9527-34e6-4006-8ac2-6dd6de7c10bd)
 3. 通过 API `GET http://192.168.4.1/wl` 获取可用网络列表。
 4. 通过 API `POST http://192.168.4.1/wc` 提交 WiFi 凭据，JSON 格式如下：
 
