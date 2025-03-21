@@ -646,6 +646,7 @@ R"xxxxxxxx(<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WiFi 配置</title>
     <style>
         body {
@@ -653,36 +654,52 @@ R"xxxxxxxx(<!DOCTYPE html>
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             font-family: Arial, sans-serif;
             background-color: #1a1a1a;
             color: #ffffff;
+            padding: 20px;
+            box-sizing: border-box;
         }
         .input-group {
             margin: 10px 0;
             text-align: center;
+            width: 100%;
+            max-width: 300px;
         }
         input {
-            padding: 5px;
-            width: 200px;
+            padding: 8px;
+            width: 100%;
+            max-width: 300px;
             background-color: #2d2d2d;
             border: 1px solid #404040;
             color: #ffffff;
             border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
         }
         input::placeholder {
             color: #888888;
         }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+            justify-content: center;
+            margin: 15px 0;
+        }
         button {
-            padding: 8px 20px;
-            margin: 10px 0;
+            padding: 10px 25px;
             background-color: #404040;
             color: #ffffff;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.3s;
+            font-size: 16px;
+            flex: 1;
         }
         button:hover {
             background-color: #505050;
@@ -690,24 +707,48 @@ R"xxxxxxxx(<!DOCTYPE html>
         #wifiList {
             list-style: none;
             padding: 0;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
-            width: 200px;
+            width: 100%;
+            max-width: 300px;
             background-color: #2d2d2d;
             border: 1px solid #404040;
             border-radius: 4px;
         }
         #wifiList li {
-            padding: 5px;
+            padding: 10px;
             cursor: pointer;
             text-align: center;
             border-bottom: 1px solid #404040;
+            font-size: 16px;
         }
         #wifiList li:last-child {
             border-bottom: none;
         }
         #wifiList li:hover {
             background-color: #383838;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .input-group, input, .button-group, #wifiList {
+                max-width: 100%;
+            }
+            input, button, #wifiList li {
+                font-size: 14px;
+            }
+            button {
+                padding: 8px 15px;
+            }
+            #wifiList li {
+                padding: 8px;
+            }
+            .button-group {
+                flex-direction: column;
+                gap: 8px;
+            }
         }
     </style>
 </head>
@@ -718,11 +759,13 @@ R"xxxxxxxx(<!DOCTYPE html>
     <div class="input-group">
         <input type="password" id="password" placeholder="请输入密码">
     </div>
-    <button onclick="configureWifi()">配置</button>
+    <div class="button-group">
+        <button onclick="configureWifi()">配置</button>
+        <button onclick="loadWifiList()">刷新</button>
+    </div>
     <ul id="wifiList"></ul>
 
     <script>
-        // 配置WiFi
         function configureWifi() {
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
@@ -743,16 +786,13 @@ R"xxxxxxxx(<!DOCTYPE html>
             .catch(error => console.error('Error:', error));
         }
 
-        // 获取并显示WiFi列表
         function loadWifiList() {
             fetch('http://192.168.4.1/wl')
                 .then(response => response.json())
                 .then(data => {
-                    // 按rssi从大到小排序
                     data.sort((a, b) => b.rssi - a.rssi);
-
                     const wifiList = document.getElementById('wifiList');
-                    wifiList.innerHTML = ''; // 清空现有列表
+                    wifiList.innerHTML = '';
 
                     data.forEach(wifi => {
                         const li = document.createElement('li');
@@ -765,8 +805,6 @@ R"xxxxxxxx(<!DOCTYPE html>
                 })
                 .catch(error => console.error('Error:', error));
         }
-
-        // 页面加载时获取WiFi列表
         window.onload = loadWifiList;
     </script>
 </body>
