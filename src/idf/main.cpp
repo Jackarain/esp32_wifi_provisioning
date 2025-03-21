@@ -22,7 +22,7 @@ static wifi_provisioning* g_wifi_provisioning = nullptr;
 
 extern "C" void setup()
 {
-    ESP_LOGI("GUEST", "进入配置阶段");
+    ESP_LOGI(TAG, "进入配置阶段");
 
     g_wifi_provisioning = new wifi_provisioning;
 
@@ -31,7 +31,7 @@ extern "C" void setup()
         switch (status)
         {
         case wifi_status::CONNECTED:
-            ESP_LOGI("GUEST", "Wi-Fi 连接成功: %s", ssid.c_str());
+            ESP_LOGI(TAG, "Wi-Fi 连接成功: %s", ssid.c_str());
 
             // 连接成功释放资源.
             g_wifi_provisioning->stop();
@@ -39,7 +39,7 @@ extern "C" void setup()
             g_wifi_provisioning = nullptr;
             break;
         case wifi_status::FAILED:
-            ESP_LOGE("GUEST", "Wi-Fi 连接失败: %s", ssid.c_str());
+            ESP_LOGE(TAG, "Wi-Fi 连接失败: %s", ssid.c_str());
             g_wifi_provisioning->start_config_server("ESP32-XXXX", "20121208");
             break;
         default:
@@ -51,15 +51,15 @@ extern "C" void setup()
 
 extern "C" void loop()
 {
-    ESP_LOGI("GUEST", "IP 地址: %s", g_wifi_provisioning->get_connected_ip().c_str());
+    ESP_LOGI(TAG, "IP 地址: %s", g_wifi_provisioning->get_connected_ip().c_str());
     static int count = 0;
-    ESP_LOGI("GUEST", "Count: %d", count++);
+    ESP_LOGI(TAG, "Count: %d", count++);
 
     if (++count == 2000 && g_wifi_provisioning)
     {
         g_wifi_provisioning->stop();
         delete g_wifi_provisioning;
         g_wifi_provisioning = nullptr;
-        ESP_LOGI("GUEST", "停止 Wi-Fi 配置");
+        ESP_LOGI(TAG, "停止 Wi-Fi 配置");
     }
 }
