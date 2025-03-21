@@ -26,6 +26,8 @@
 namespace esp32_wifi_util
 {
     static const int WIFI_DONE_BIT = BIT0;
+    static const int WIFI_FAIL_BIT = BIT1;
+
     static const char *TAG = "WIFI_PROVISIONING";
     static const char *wifi_settings = "wifi_settings";
 
@@ -78,9 +80,19 @@ namespace esp32_wifi_util
         }
         else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
         {
-            ESP_LOGI(TAG, "STATION 模式，重新连接到 Wi-Fi");
-            if (g_wifi_mode == WIFI_MODE_STA && ++m_retry_count < 5)
-                esp_wifi_connect();
+            if (g_wifi_mode == WIFI_MODE_STA)
+            {
+                ESP_LOGI(TAG, "STATION 模式，重新连接到 Wi-Fi");
+
+                if (m_retry_count++ < 5)
+                    esp_wifi_connect();
+                else
+                    xEventGroupSetBits(g_wifi_event_group, WIFI_FAIL_BIT);
+            }
+            else if (g_wifi_mode == WIFI_MODE_AP)
+            {
+                ESP_LOGI(TAG, "AP 模式，重新连接到 Wi-Fi");
+            }
         }
         else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
         {
@@ -133,6 +145,7 @@ namespace esp32_wifi_util
     {
         ESP_LOGI(TAG, "开始自动连接 Wi-Fi ...");
 
+        m_retry_count = 0;
         m_connect_cb = connect_cb;
 
         // 使用 scoped_exit 确保返回时回调失败。
@@ -227,12 +240,12 @@ namespace esp32_wifi_util
                              { esp_wifi_scan_stop(); });
 
         auto bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT, false, true, portMAX_DELAY);
-        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
         if (!(bits & WIFI_DONE_BIT))
         {
             ESP_LOGE(TAG, "Wi-Fi 扫描失败");
             return;
         }
+        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
 
         uint16_t ap_count = 0;
         ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
@@ -309,16 +322,16 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_start());
 
         ESP_LOGI(TAG, "开始连接 WiFi %s, 密码: %s", ssid.c_str(), password.c_str());
-        EventBits_t bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT, false, true, portMAX_DELAY);
-        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
+        EventBits_t bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_FAIL_BIT | WIFI_DONE_BIT, false, false, portMAX_DELAY);
+        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT|WIFI_FAIL_BIT);
         if (bits & WIFI_DONE_BIT)
         {
-            ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
+            ESP_LOGI(TAG, "成功连接到 WiFi %s", ssid.c_str());
             return true;
         }
         else
         {
-            ESP_LOGE(TAG, "Failed to connect to WiFi %s", ssid.c_str());
+            ESP_LOGE(TAG, "连接到 WiFi %s 失败！！！", ssid.c_str());
             return false;
         }
     }
@@ -368,7 +381,7 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
 
-        ESP_LOGI(TAG, "WiFi 已经启动, SSID: %s", m_ssid.c_str());
+        ESP_LOGI(TAG, "WiFi AP 已经启动, SSID: %s", m_ssid.c_str());
 
         return true;
     }
