@@ -51,12 +51,14 @@ namespace esp32_wifi_util
         // 开始自动配网
         void auto_connect(connect_callback_t connect_cb);
 
-        // 启动配置服务器，通常在自动连接 Wi-Fi 失败时调用（auto_connect）。
+        // 启动配置服务器，通常用于在自动连接 Wi-Fi 失败时调用（auto_connect）。
+        // 客户可通过内置的 web 页面进行配置，访问 http://192.168.4.1/webconfig 进入配置页面进行
+        // 配置。
         // 该函数会启动一个 HTTP 服务器，用于手动配置设备的 Wi-Fi 连接，配置成功后，该设备将自动尝
-        // 试连接到用户指定的 Wi-Fi 网络，具体用法：
-        // 在 HTTP 成功启动后，用户可以通过访问 http://192.168.4.1/wl (GET 请求) 获取设备扫描到
-        // 的可用 Wi-Fi 网络列表，并通过 http://192.168.4.1/wc (POST 请求) 提交一个 JSON 数据来
-        // 配置 Wi-Fi，JSON 格式示例：
+        // 试连接到用户指定的 Wi-Fi 网络，具体细节：
+        // 在 HTTP 服务成功启动后，用户可以通过访问 http://192.168.4.1/wl (GET 请求) 获取设备扫
+        // 描到的可用 Wi-Fi 网络列表，并通过 http://192.168.4.1/wc (POST 请求) 提交一个 JSON 数
+        // 据来配置 Wi-Fi，JSON 格式示例：
         //   {"ssid":"your_ssid","password":"your_password"}
         //
         // 函数参数：
