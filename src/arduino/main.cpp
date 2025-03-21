@@ -27,9 +27,9 @@ static wifi_provisioning* g_wifi_provisioning = nullptr;
 
 void setup()
 {
-    const char* version = esp_get_idf_version();
-    ESP_LOGI(TAG, "*** 当前 idf 版本: %s ***", version);
-    ESP_LOGI(TAG, "*** 可用内存大小(bytes): %d ***", (int)esp_get_free_heap_size());
+    Serial.begin(115200);
+    delay(1000);
+    esp_log_level_set("*", ESP_LOG_VERBOSE);
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -85,4 +85,6 @@ void loop()
             ESP_LOGI(TAG, "停止 Wi-Fi 配置");
         }
     }
+
+    delay(1000);
 }
