@@ -222,6 +222,9 @@ namespace esp32_wifi_util
         // 扫描 Wi-Fi
         ESP_ERROR_CHECK(esp_wifi_scan_start(nullptr, false));
 
+        scoped_exit stop_wifi_scan([&]
+                             { esp_wifi_scan_stop(); });
+
         auto bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT, false, true, portMAX_DELAY);
         xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
         if (!(bits & WIFI_DONE_BIT))
@@ -245,6 +248,8 @@ namespace esp32_wifi_util
             ESP_LOGE(TAG, "内存分配失败");
             return;
         }
+        scoped_exit free_ap_records([&]
+                                   { free(ap_records); });
 
         m_wifi_list.clear();
 
@@ -265,10 +270,10 @@ namespace esp32_wifi_util
         }
 
         // 释放内存
-        free(ap_records);
+        free_ap_records();
 
         // 停止扫描
-        esp_wifi_scan_stop();
+        stop_wifi_scan();
 
         // 回调扫描结果
         call_scan_cb(m_wifi_list);
