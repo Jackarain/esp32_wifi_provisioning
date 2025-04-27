@@ -9,9 +9,8 @@
 #define WIFI_PROVISIONING_HPP
 
 #include <string>
-#include <vector>
 #include <functional>
-#include <atomic>
+#include <memory>
 
 namespace esp32_wifi_util
 {
@@ -31,6 +30,8 @@ namespace esp32_wifi_util
         uint8_t auth_mode;  // 认证模式
     };
 
+    class wifi_provisioning_impl;
+
     using connect_callback_t = std::function<void(wifi_status, std::string)>;
     using scan_callback_t = std::function<void(std::vector<wifi_network>)>;
 
@@ -40,12 +41,9 @@ namespace esp32_wifi_util
         wifi_provisioning(const wifi_provisioning&) = delete;
         wifi_provisioning& operator=(const wifi_provisioning&) = delete;
 
-        friend void Wifi_Event_Handler(
-            void* arg, const char* event_base, int32_t event_id, void* event_data);
-
     public:
         wifi_provisioning();
-        ~wifi_provisioning() = default;
+        ~wifi_provisioning();
 
     public:
         // 开始自动配网
@@ -92,34 +90,7 @@ namespace esp32_wifi_util
         void clear_wifi_config();
 
     private:
-        void call_connect_cb(wifi_status status, const std::string& ssid);
-        void call_scan_cb(const std::vector<wifi_network>& wifi_list);
-
-        int http_test_handler(void* arg);
-        int http_wifi_list_handler(void* arg);
-        int http_wifi_config_handler(void* arg);
-        int http_wifi_web_config_handler(void *arg);
-        int captive_redirect_uri_handler(void *arg);
-
-        void reset_event_handler();
-        void wifi_event_handler(const char* event_base, int32_t event_id, void* event_data);
-        bool connect_wifi_impl(void* wc);
-
-        void start_dns();
-        void dns_handler();
-        void stop_dns();
-
-    private:
-        connect_callback_t m_connect_cb;
-        scan_callback_t m_scan_cb;
-
-        std::string m_ssid;
-        std::vector<wifi_network> m_wifi_list;
-        int m_retry_count = 0;
-
-        int m_dns_fd = -1;
-
-        std::atomic_bool m_abort{ false };
+        std::unique_ptr<wifi_provisioning_impl> m_impl;
     };
 }
 
