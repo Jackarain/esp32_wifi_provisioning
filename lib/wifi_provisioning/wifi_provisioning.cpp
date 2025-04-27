@@ -9,6 +9,7 @@
 #include "scoped_exit.hpp"
 
 #include <string.h>
+#include <sys/socket.h>
 
 #include <esp_log.h>
 #include <esp_wifi.h>
@@ -22,6 +23,9 @@
 
 
 #include <nvs_flash.h>
+
+#include "freertos/event_groups.h"
+
 
 namespace esp32_wifi_util
 {
@@ -37,6 +41,7 @@ namespace esp32_wifi_util
     static EventGroupHandle_t g_wifi_event_group = nullptr;
 
     static httpd_handle_t g_httpd_server = nullptr;
+    static bool g_wifi_start = false;
 
     void Wifi_Event_Handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
     {
@@ -72,7 +77,13 @@ namespace esp32_wifi_util
 
     void wifi_provisioning::wifi_event_handler(const char *event_base, int32_t event_id, void *event_data)
     {
-        if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+        if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED)
+        {
+            ESP_LOGI(TAG, "STATION 模式，已经连接到 Wi-Fi ");
+            xEventGroupSetBits(g_wifi_event_group, WIFI_DONE_BIT);
+            return;
+        }
+        else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
         {
             ESP_LOGI(TAG, "STATION 模式，开始连接到 Wi-Fi");
             if (g_wifi_mode == WIFI_MODE_STA)
@@ -82,12 +93,8 @@ namespace esp32_wifi_util
         {
             if (g_wifi_mode == WIFI_MODE_STA)
             {
-                ESP_LOGI(TAG, "STATION 模式，重新连接到 Wi-Fi");
-
-                if (m_retry_count++ < 5)
-                    esp_wifi_connect();
-                else
-                    xEventGroupSetBits(g_wifi_event_group, WIFI_FAIL_BIT);
+                ESP_LOGI(TAG, "STATION 模式，Wi-Fi 连接失败");
+                xEventGroupSetBits(g_wifi_event_group, WIFI_FAIL_BIT);
             }
             else if (g_wifi_mode == WIFI_MODE_AP)
             {
@@ -231,21 +238,25 @@ namespace esp32_wifi_util
         m_scan_cb = scan_callback;
         m_retry_count = 0;
 
-        ESP_ERROR_CHECK(esp_wifi_start());
-
         // 扫描 Wi-Fi
+        if (!g_wifi_start)
+        {
+            ESP_ERROR_CHECK(esp_wifi_start());
+            g_wifi_start = true;
+        }
+
         ESP_ERROR_CHECK(esp_wifi_scan_start(nullptr, false));
 
         scoped_exit stop_wifi_scan([&]
                              { esp_wifi_scan_stop(); });
 
-        auto bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT, false, true, portMAX_DELAY);
-        if (!(bits & WIFI_DONE_BIT))
+        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT | WIFI_FAIL_BIT);
+        auto bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
+        if (bits & WIFI_FAIL_BIT)
         {
             ESP_LOGE(TAG, "Wi-Fi 扫描失败");
             return;
         }
-        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT);
 
         uint16_t ap_count = 0;
         ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
@@ -295,10 +306,6 @@ namespace esp32_wifi_util
 
     bool wifi_provisioning::connect_wifi(const std::string &ssid, const std::string &password)
     {
-        // 设置 Wi-Fi 配置并连接到 Wi-Fi
-        wifi_config_t wifi_config = {};
-        memset(&wifi_config, 0, sizeof(wifi_config_t));
-
         m_ssid = ssid;
 
         // 保存 Wi-Fi 模式
@@ -311,29 +318,18 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_deinit());
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-        // 注册事件处理程序
-        reset_event_handler();
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+        g_wifi_start = false;
+
+        // 设置 Wi-Fi 配置并连接到 Wi-Fi
+        wifi_config_t wifi_config = {};
+        memset(&wifi_config, 0, sizeof(wifi_config_t));
 
         strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
         strcpy((char *)wifi_config.sta.password, password.c_str());
 
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-        ESP_ERROR_CHECK(esp_wifi_start());
-
-        ESP_LOGI(TAG, "开始连接 WiFi %s, 密码: %s", ssid.c_str(), password.c_str());
-        EventBits_t bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_FAIL_BIT | WIFI_DONE_BIT, false, false, portMAX_DELAY);
-        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT|WIFI_FAIL_BIT);
-        if (bits & WIFI_DONE_BIT)
-        {
-            ESP_LOGI(TAG, "成功连接到 WiFi %s", ssid.c_str());
-            return true;
-        }
-        else
-        {
-            ESP_LOGE(TAG, "连接到 WiFi %s 失败！！！", ssid.c_str());
-            return false;
-        }
+        return connect_wifi_impl(&wifi_config);
     }
 
     bool wifi_provisioning::create_ap(const std::string &ap_ssid, const std::string &ap_password)
@@ -356,10 +352,12 @@ namespace esp32_wifi_util
         ESP_ERROR_CHECK(esp_wifi_deinit());
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+        g_wifi_start = false;
+
         // 注册事件处理程序
         reset_event_handler();
 
-        wifi_config_t wifi_config = {0};
+        wifi_config_t wifi_config = {};
 
         strcpy((char *)wifi_config.ap.ssid, m_ssid.c_str());
         if (!ap_password.empty())
@@ -379,7 +377,11 @@ namespace esp32_wifi_util
 
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-        ESP_ERROR_CHECK(esp_wifi_start());
+        if (!g_wifi_start)
+        {
+            ESP_ERROR_CHECK(esp_wifi_start());
+            g_wifi_start = true;
+        }
 
         ESP_LOGI(TAG, "WiFi AP 已经启动, SSID: %s", m_ssid.c_str());
 
@@ -392,25 +394,19 @@ namespace esp32_wifi_util
         if (!create_ap(ap_ssid, ap_password))
             return false;
 
+        // 启动 DNS 服务器
+        start_dns();
+
         // 创建 HTTP 服务器
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.server_port = port;
+        config.max_uri_handlers = 24;
+        config.max_resp_headers = 24;
+        config.uri_match_fn = httpd_uri_match_wildcard;
 
         if (httpd_start(&g_httpd_server, &config) == ESP_OK)
         {
             // 注册 URI 处理程序
-            httpd_uri_t root = {
-                .uri = "/",         // 根路径
-                .method = HTTP_GET, // 处理 GET 请求
-                .handler = [](httpd_req_t *req) -> esp_err_t
-                {
-                    auto self = (wifi_provisioning *)req->user_ctx;
-                    return self->http_test_handler((void *)req);
-                },
-                .user_ctx = (void *)this // 用户上下文（可选）
-            };
-            httpd_register_uri_handler(g_httpd_server, &root);
-
             httpd_uri_t http_test = {
                 .uri = "/test",
                 .method = HTTP_GET, // 处理 GET 请求
@@ -459,6 +455,37 @@ namespace esp32_wifi_util
             };
             httpd_register_uri_handler(g_httpd_server, &http_wifi_webconfig);
 
+            const char* captive_portal_urls[] = {
+                "/hotspot-detect.html",         // Apple
+                "/generate_204",                // Android
+                "/mobile/status.php",           // Android
+                "/check_network_status.txt",    // Windows
+                "/ncsi.txt",                    // Windows
+                "/connecttest.txt",             // Windows
+                "/redirect",                    // Windows
+                "/fwlink/",                     // Microsoft
+                "/connectivity-check.html",     // Firefox
+                "/success.txt",                 // Various
+                "/portal.html",                 // Various
+                "/library/test/success.html"    // Apple
+            };
+
+            for (const auto& url : captive_portal_urls)
+            {
+                httpd_uri_t captive_redirect_uri = {
+                    .uri = url,
+                    .method = HTTP_GET,
+                    .handler = [](httpd_req_t *req) -> esp_err_t
+                    {
+                        auto self = (wifi_provisioning *)req->user_ctx;
+                        return self->captive_redirect_uri_handler((void* )req);
+                    },
+                    .user_ctx = (void *)this // 用户上下文（可选）
+                };
+
+                httpd_register_uri_handler(g_httpd_server, &captive_redirect_uri);
+            }
+
             ESP_LOGI(TAG, "HTTP server started on port %d", config.server_port);
         }
         else
@@ -467,6 +494,141 @@ namespace esp32_wifi_util
         }
 
         return true;
+    }
+
+    bool wifi_provisioning::connect_wifi_impl(void* wc)
+    {
+        // 获取 Wi-Fi 配置指针
+        wifi_config_t* wifi_config = (wifi_config_t*)wc;
+        if (!wifi_config || !wifi_config->sta.ssid[0])
+        {
+            ESP_LOGE(TAG, "Wi-Fi 配置无效");
+            return false;
+        }
+
+        // 停止 Wi-Fi 扫描
+        esp_wifi_scan_stop();
+
+        // 保存 Wi-Fi 模式
+        g_wifi_mode = WIFI_MODE_STA;
+
+        // 初始化 Wi-Fi
+        wifi_config->sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+        wifi_config->sta.failure_retry_cnt = 1;
+
+        // 开始连接 Wi-Fi
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, wifi_config));
+        if (!g_wifi_start)
+        {
+            ESP_ERROR_CHECK(esp_wifi_start());
+            g_wifi_start = true;
+        }
+
+        auto ret = esp_wifi_connect();
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Wi-Fi 连接失败: %s", esp_err_to_name(ret));
+            return false;
+        }
+
+        ESP_LOGI(TAG, "开始连接 WiFi %s, 密码: %s",
+            wifi_config->sta.ssid, wifi_config->sta.password);
+
+        xEventGroupClearBits(g_wifi_event_group, WIFI_DONE_BIT | WIFI_FAIL_BIT);
+        auto bits = xEventGroupWaitBits(g_wifi_event_group, WIFI_DONE_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
+        if ((bits & WIFI_FAIL_BIT))
+        {
+            ESP_LOGE(TAG, "Wi-Fi 连接失败");
+            return false;
+        }
+
+        ESP_LOGI(TAG, "Wi-Fi 连接成功");
+
+        return true;
+    }
+
+    void wifi_provisioning::start_dns()
+    {
+        ESP_LOGI(TAG, "Start DNS server...");
+
+        m_dns_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (m_dns_fd < 0)
+        {
+            ESP_LOGE(TAG, "Failed to create DNS socket: %s", strerror(errno));
+            return;
+        }
+
+        struct sockaddr_in dns_addr;
+        memset(&dns_addr, 0, sizeof(dns_addr));
+        dns_addr.sin_family = AF_INET;
+        dns_addr.sin_port = htons(53);
+        dns_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+        if (bind(m_dns_fd, (struct sockaddr *)&dns_addr, sizeof(dns_addr)) < 0)
+        {
+            ESP_LOGE(TAG, "Failed to bind DNS socket: %s", strerror(errno));
+            close(m_dns_fd);
+            m_dns_fd = -1;
+            return;
+        }
+
+        ESP_LOGI(TAG, "DNS server started on port 53");
+
+        xTaskCreate([](void* arg) {
+            wifi_provisioning* self = static_cast<wifi_provisioning*>(arg);
+            self->dns_handler();
+        }, "dns_server", 4096, this, 5, NULL);
+    }
+
+    void wifi_provisioning::stop_dns()
+    {
+        ESP_LOGI(TAG, "stop DNS server...");
+        if (m_dns_fd >= 0)
+        {
+            close(m_dns_fd);
+            m_dns_fd = -1;
+            ESP_LOGI(TAG, "DNS server stopped");
+        }
+    }
+
+    void wifi_provisioning::dns_handler()
+    {
+        if (m_dns_fd < 0)
+            return;
+
+        while (!m_abort)
+        {
+            struct sockaddr_in client_addr;
+            socklen_t addr_len = sizeof(client_addr);
+
+            char buffer[512];
+            ssize_t len = recvfrom(m_dns_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &addr_len);
+            if (len < 0)
+            {
+                ESP_LOGE(TAG, "Failed to receive DNS request: %s", strerror(errno));
+                continue;
+            }
+
+            ESP_LOGI(TAG, "Received DNS request from %s:%d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+
+            // 这里可以固定返回一个 IP 地址 192.168.4.1
+            buffer[2] |= 0x80;  // Set response flag
+            buffer[3] |= 0x80;  // Set Recursion Available
+            buffer[7] = 1;      // Set answer count to 1
+
+            // Add answer section
+            memcpy(&buffer[len], "\xc0\x0c", 2);  // Name pointer
+            len += 2;
+            memcpy(&buffer[len], "\x00\x01\x00\x01\x00\x00\x00\x1c\x00\x04", 10);  // Type, class, TTL, data length
+            len += 10;
+            esp_ip4_addr_t ip_info;
+            IP4_ADDR(&ip_info, 192, 168, 4, 1);  // IP address
+            memcpy(&buffer[len], &ip_info.addr, 4);  // 192.168.4.1
+            len += 4;
+            ESP_LOGI(TAG, "Sending DNS response to %s", inet_ntoa(ip_info.addr));
+
+            sendto(m_dns_fd, buffer, len, 0, (struct sockaddr *)&client_addr, addr_len);
+        }
     }
 
     void wifi_provisioning::stop()
@@ -478,6 +640,8 @@ namespace esp32_wifi_util
             httpd_stop(g_httpd_server);
             g_httpd_server = nullptr;
         }
+
+        stop_dns();
 
         if (g_instance_any_id)
         {
@@ -514,7 +678,7 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 test HTTP 请求");
+        ESP_LOGI(TAG, "处理 http_test_handler 请求");
 
         // 处理请求
         httpd_resp_send(req, "Hello, World!", -1);
@@ -526,7 +690,7 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 wifi list HTTP 请求!!!");
+        ESP_LOGI(TAG, "处理 http_wifi_list_handler 请求!!!");
 
         scan_networks([req](std::vector<wifi_network> wifi_list)
         {
@@ -568,18 +732,24 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 wifi config HTTP 请求");
+        ESP_LOGI(TAG, "处理 http_wifi_config_handler 请求");
 
         char buf[100]; // 用于存储POST数据的缓冲区
         int ret;
+        std::string error_msg = "error";
+
+        scoped_exit failed_exit([&] () mutable
+        {
+            httpd_resp_set_type(req, "application/json");
+            sprintf(buf, "{ \"result\": \"%s\" }", error_msg.c_str());
+            httpd_resp_send(req, buf, -1);
+        });
 
         // 获取POST数据
         ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
         if (ret <= 0)
-        {   // 如果没有数据可用，或者发生错误，则返回错误
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-                httpd_resp_send_408(req);
-            return ESP_FAIL;
+        {
+            return ESP_OK;
         }
 
         // 确保缓冲区以null结尾
@@ -590,8 +760,8 @@ namespace esp32_wifi_util
         cJSON *root = cJSON_Parse(buf);
         if (!root)
         {
-            httpd_resp_send_500(req);
-            return ESP_FAIL;
+            error_msg = "json parse error";
+            return ESP_OK;
         }
 
         scoped_exit root_deleter([&]
@@ -602,8 +772,8 @@ namespace esp32_wifi_util
 
         if (!ssid || !password)
         {
-            httpd_resp_send_500(req);
-            return ESP_FAIL;
+            error_msg = "ssid or password is null";
+            return ESP_OK;
         }
 
         ESP_LOGI(TAG, "SSID: %s, Password: %s", ssid->valuestring, password->valuestring);
@@ -617,38 +787,49 @@ namespace esp32_wifi_util
             err = nvs_set_str(nvs_handle, "ssid", ssid->valuestring);
             if (err != ESP_OK)
             {
+                error_msg = "ssid save error";
+
                 ESP_LOGI(TAG, "保存 SSID 失败, ERROR: %d", err);
-
                 nvs_close(nvs_handle);
-                httpd_resp_send_500(req);
 
-                return ESP_FAIL;
+                return ESP_OK;
             }
 
             err = nvs_set_str(nvs_handle, "password", password->valuestring);
             if (err != ESP_OK)
             {
+                error_msg = "password save error";
+
                 ESP_LOGI(TAG, "保存密码失败, ERROR: %d", err);
-
                 nvs_close(nvs_handle);
-                httpd_resp_send_500(req);
 
-                return ESP_FAIL;
+                return ESP_OK;
             }
 
             ESP_ERROR_CHECK(nvs_commit(nvs_handle));
             nvs_close(nvs_handle);
         }
 
+        // 设置 Wi-Fi 配置并连接到 Wi-Fi
+        wifi_config_t wifi_config = {};
+        memset(&wifi_config, 0, sizeof(wifi_config_t));
+
+        strcpy((char *)wifi_config.sta.ssid, ssid->valuestring);
+        strcpy((char *)wifi_config.sta.password, password->valuestring);
+
         // 连接到 Wi-Fi
-        if (connect_wifi(ssid->valuestring, password->valuestring))
+        if (connect_wifi_impl(&wifi_config))
         {
-            httpd_resp_send(req, "OK", -1);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, "{ \"result\": \"ok\" }", -1);
         }
         else
         {
-            httpd_resp_send_500(req);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, "{ \"result\": \"failed\" }", -1);
         }
+
+        failed_exit.cancel();
 
         return ESP_OK;
     }
@@ -657,7 +838,7 @@ namespace esp32_wifi_util
     {
         auto req = (httpd_req_t *)arg;
 
-        ESP_LOGI(TAG, "处理 test HTTP 请求");
+        ESP_LOGI(TAG, "处理 http_wifi_web_config_handler 请求");
 
         // 处理请求
         httpd_resp_send(req,
@@ -801,7 +982,18 @@ R"xxxxxxxx(<!DOCTYPE html>
                 body: JSON.stringify(data)
             })
             .then(response => response.json())
-            .then(data => console.log('Success:', data))
+            .then(data => {
+                const wifiList = document.getElementById('wifiList');
+                wifiList.innerHTML = '';
+                const li = document.createElement('li');
+                if (data.result === 'ok') {
+                    li.textContent = '连接 WiFi 成功';
+                } else {
+                    li.textContent = `连接失败: ${data.result}`;
+                }
+                wifiList.appendChild(li);
+                console.log('Success:', data);
+            })
             .catch(error => console.error('Error:', error));
         }
 
@@ -828,6 +1020,22 @@ R"xxxxxxxx(<!DOCTYPE html>
     </script>
 </body>
 </html>)xxxxxxxx", -1);
+
+        return ESP_OK;
+    }
+
+    int wifi_provisioning::captive_redirect_uri_handler(void *arg)
+    {
+        ESP_LOGI(TAG, "处理 captive_redirect_uri_handler 请求");
+
+        auto req = (httpd_req_t *)arg;
+
+        std::string url = "http://192.168.4.1/webconfig";
+        httpd_resp_set_type(req, "text/html");
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", url.c_str());
+        httpd_resp_set_hdr(req, "Connection", "close");
+        httpd_resp_send(req, nullptr, 0);
 
         return ESP_OK;
     }

@@ -99,9 +99,15 @@ namespace esp32_wifi_util
         int http_wifi_list_handler(void* arg);
         int http_wifi_config_handler(void* arg);
         int http_wifi_web_config_handler(void *arg);
+        int captive_redirect_uri_handler(void *arg);
 
         void reset_event_handler();
         void wifi_event_handler(const char* event_base, int32_t event_id, void* event_data);
+        bool connect_wifi_impl(void* wc);
+
+        void start_dns();
+        void dns_handler();
+        void stop_dns();
 
     private:
         connect_callback_t m_connect_cb;
@@ -110,6 +116,8 @@ namespace esp32_wifi_util
         std::string m_ssid;
         std::vector<wifi_network> m_wifi_list;
         int m_retry_count = 0;
+
+        int m_dns_fd = -1;
 
         std::atomic_bool m_abort{ false };
     };
